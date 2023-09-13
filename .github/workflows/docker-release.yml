@@ -40,4 +40,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/termider/${{ github.event.repository.name }}:${{ matrix.versions }}
+          tags: ghcr.io/iut-terminder/${{ github.event.repository.name }}:${{ matrix.versions }}
