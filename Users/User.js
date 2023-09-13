@@ -90,7 +90,7 @@ UserAPI.post('/add_playlist', async (req, res) => {
     user.playlists.push(playlist);
     await user.save();
 
-    res.status(200).send({ status: 'complete succsefuly' });
+    res.status(200).send({ status: 'complete succsefuly', id: user.playlists.slice(-1)[0]._id });
   } catch (err) {
     res.status(400).send({ error: err.message });
   }
