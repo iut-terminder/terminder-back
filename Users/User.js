@@ -52,6 +52,26 @@ UserAPI.post('/login', async (req, res) => {
   }
 });
 
+UserAPI.post('/check', async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await search(email);
+
+    if (user === -1) {
+      res.status(404).send({ status: 'email not found' });
+      return;
+    }
+
+    else if (user) {
+      res.status(200).send({ status: 'valid user' });
+      return;
+    }
+  } catch (err) {
+    res.status(400).send({ error: err.message });
+  }
+});
+
 UserAPI.post('/add_playlist', async (req, res) => {
   const { email, playlist } = req.body;
 

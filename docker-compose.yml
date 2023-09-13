@@ -1,0 +1,34 @@
+version: '3'
+services:
+  entekhab_vahed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: entekhab_vahed
+    ports:
+      - "${PORT}:${PORT}"
+    environment:
+      - MONGO_URI=${MONGODB_URL}
+      - PORT=${PORT}
+    restart: always
+    depends_on: 
+      - entekhab_vahed_db
+    env_file:
+      - .env
+  entekhab_vahed_db:
+    image: mongo:latest
+    container_name: entekhab_vahed_db
+    ports:
+      - "27777:27017"
+    environment:
+    -  MONGO_INITDB_ROOT_USERNAME=${MONGODB_USERNAME}
+    -  MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD}
+    volumes:
+      - mongodb_vahed_db:/data/db
+    restart: 
+      always
+    env_file:
+      - .env
+
+volumes:
+  mongodb_vahed_db:
