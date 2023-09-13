@@ -62,9 +62,7 @@ UserAPI.post('/check', async (req, res) => {
     if (user === -1) {
       res.status(404).send({ status: 'email not found' });
       return;
-    }
-
-    else if (user) {
+    } else if (user) {
       res.status(200).send({ status: 'valid user' });
       return;
     }
@@ -119,7 +117,10 @@ UserAPI.post('/get_playlist', async (req, res) => {
         populatedPlaylist.push(populatedLesson);
       }
 
-      populatedPlaylists.push(populatedPlaylist);
+      populatedPlaylists.push({
+        _id: playlist._id,
+        playlist: populatedPlaylist,
+      });
     }
 
     res.status(200).send(populatedPlaylists);
