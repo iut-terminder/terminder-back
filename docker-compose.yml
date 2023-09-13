@@ -16,7 +16,7 @@ services:
     env_file:
       - .env
   entekhab_vahed_db:
-    image: mongo:latest
+    image: mongo:4.4.18
     container_name: entekhab_vahed_db
     ports:
       - "27777:27017"
