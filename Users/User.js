@@ -145,7 +145,7 @@ UserAPI.post('/edit_playlist', async (req, res) => {
 
     for (const _playlist of user.playlists) {
       if (id.equals(_playlist._id)) {
-        user.playlists[index] = playlist;
+        user.playlists[index].playlist = playlist.playlist;
         await user.save();
         res.status(200).send({ status: 'playlist edited succesfully' });
         return;
