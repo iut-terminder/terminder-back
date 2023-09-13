@@ -4,13 +4,18 @@ import Lesson from './LessonSchema.js';
 const LessonAPI = express.Router();
 
 LessonAPI.post('/add', async (req, res) => {
-  const { Name, time } = req.body;
+  const { Name, time, exam_date, lesson_code } = req.body;
 
   try {
     let lesson = await Lesson.findOne({ Name: Name.trim() });
 
     if (!lesson) {
-      lesson = new Lesson({ Name: Name.trim(), times: [] });
+      lesson = new Lesson({
+        Name: Name.trim(),
+        times: [],
+        exam_date: exam_date.trim(),
+        lesson_code: lesson_code.trim(),
+      });
       await lesson.save();
     }
 
@@ -25,6 +30,7 @@ LessonAPI.post('/add', async (req, res) => {
 
 LessonAPI.get('/all', async (req, res) => {
   const lessens = await Lesson.find();
+  lessens.sort((a, b) => a.Name.localeCompare(b.Name, 'fa'));
   res.status(200).send(lessens);
 });
 

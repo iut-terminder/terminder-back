@@ -1,6 +1,7 @@
 import express from 'express';
 import User from './UserSchema.js';
 import Lesson from '../Lessons/LessonSchema.js';
+import { ObjectId } from 'mongodb';
 
 const UserAPI = express.Router();
 
@@ -13,7 +14,7 @@ UserAPI.post('/signup', async (req, res) => {
       return;
     }
 
-    if (password.trim().length < 8)
+    if (password.trim().length < 6)
       throw Error('password must have 6 chcaracter');
 
     const user = new User({
@@ -93,7 +94,7 @@ UserAPI.post('/get_playlist', async (req, res) => {
     for (const playlist of user.playlists) {
       const populatedPlaylist = [];
 
-      for (const lessonId of playlist) {
+      for (const lessonId of playlist.playlist) {
         const populatedLesson = await Lesson.findById(lessonId);
         populatedPlaylist.push(populatedLesson);
       }
@@ -102,6 +103,64 @@ UserAPI.post('/get_playlist', async (req, res) => {
     }
 
     res.status(200).send(populatedPlaylists);
+  } catch (err) {
+    res.status(400).send({ error: err.message });
+  }
+});
+
+UserAPI.post('/edit_playlist', async (req, res) => {
+  let { email, playlist, id } = req.body;
+  id = new ObjectId(id);
+
+  try {
+    let user = await search(email);
+
+    if (user === -1) {
+      res.status(404).send({ status: 'email not found' });
+      return;
+    }
+
+    let index = 0;
+
+    for (const _playlist of user.playlists) {
+      if (id.equals(_playlist._id)) {
+        user.playlists[index] = playlist;
+        await user.save();
+        res.status(200).send({ status: 'playlist edited succesfully' });
+        return;
+      }
+      index++;
+    }
+    res.status(404).send({ status: 'playlist is not found' });
+  } catch (err) {
+    res.status(400).send({ error: err.message });
+  }
+});
+
+UserAPI.delete('/delete_playlist', async (req, res) => {
+  let { email, id } = req.body;
+  id = new ObjectId(id);
+
+  try {
+    let user = await search(email);
+
+    if (user === -1) {
+      res.status(404).send({ status: 'email not found' });
+      return;
+    }
+
+    let index = 0;
+
+    for (const _playlist of user.playlists) {
+      if (id.equals(_playlist._id)) {
+        user.playlists.splice(index, 1);
+        await user.save();
+        res.status(200).send({ status: 'playlist deleted succesfully' });
+        return;
+      }
+      index++;
+    }
+    res.status(404).send({ status: 'playlist is not found' });
   } catch (err) {
     res.status(400).send({ error: err.message });
   }

@@ -4,13 +4,15 @@ import crypto from 'crypto';
 const UserSchema = new mongoose.Schema({
   email: { type: String, required: true },
   playlists: [
-    [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Lesson',
-        required: true,
-      },
-    ],
+    {
+      playlist: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Lesson',
+          required: true,
+        },
+      ],
+    },
   ],
   hash: { type: String, required: true },
   salt: { type: String, required: true },
