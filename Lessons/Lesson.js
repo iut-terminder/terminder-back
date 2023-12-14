@@ -61,7 +61,6 @@ LessonAPI.post('/add', async (req, res) => {
 });
 
 LessonAPI.get('/all', async (req, res) => {
-  await Lesson.deleteMany({});
   const lessens = await Lesson.find();
   lessens.sort((a, b) => a.Name.localeCompare(b.Name, 'fa'));
   res.status(200).send(lessens);
