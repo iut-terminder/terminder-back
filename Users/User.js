@@ -9,19 +9,13 @@ const UserAPI = express.Router();
 
 UserAPI.get('/verify', async (req, res) => {
   try {
-    const { student_number, email, password, isAdmin } = jwt.verify(
+    const { student_number } = jwt.verify(
       req.query.token,
       process.env.AUTH_EMAIL_TOKEN_SECRET
     );
 
-    const user = new User({
-      student_number: student_number,
-      email: email,
-      isAdmin: isAdmin,
-      playlists: [],
-    });
-
-    user.setPassword(password);
+    let user = await User.findOne({ student_number: student_number });
+    user.isEmailVerified = true;
     await user.save();
 
     res.status(200).send({ status: 'your account created successfully..' });
@@ -31,12 +25,33 @@ UserAPI.get('/verify', async (req, res) => {
 });
 
 UserAPI.post('/signup', async (req, res) => {
-  const { student_number, email, password, isAdmin } = req.body;
+  const { student_number, email, password } = req.body;
   try {
-    let user = await User.findOne({ student_number: student_number.trim() });
+    let user = await User.findOne({
+      student_number: student_number.trim(),
+    });
 
-    if (user) {
-      res.status(406).send({ status: 'this email previously signed up' });
+    if (user && user.isEmailVerified) {
+      res
+        .status(406)
+        .send({ status: 'this student_number previously signed up' });
+      return;
+    }
+
+    const payload = {
+      student_number: student_number.trim(),
+    };
+
+    const emailToken = jwt.sign(payload, process.env.AUTH_EMAIL_TOKEN_SECRET, {
+      expiresIn: '15m',
+    });
+
+    if (user && !user.isEmailVerified) {
+      send_email(email.trim(), emailToken);
+      res.status(200).send({
+        status:
+          'your account already exist but not verified. verification email was send again.',
+      });
       return;
     }
 
@@ -48,16 +63,16 @@ UserAPI.post('/signup', async (req, res) => {
     if (!email.trim().endsWith('iut.ac.ir'))
       throw Error('email must be from iut.');
 
-    const payload = {
+    user = new User({
       student_number: student_number.trim(),
       email: email.trim(),
-      password: password.trim(),
-      isAdmin: isAdmin ? isAdmin : false,
-    };
-
-    const emailToken = jwt.sign(payload, process.env.AUTH_EMAIL_TOKEN_SECRET, {
-      expiresIn: '5m',
+      isAdmin: false,
+      isEmailVerified: false,
+      playlists: [],
     });
+
+    user.setPassword(password);
+    await user.save();
 
     send_email(email.trim(), emailToken);
 
@@ -71,10 +86,15 @@ UserAPI.post('/login', async (req, res) => {
   const { student_number, password } = req.body;
 
   try {
-    const user = await User.findOne({ student_number: student_number.trim() });
+    const user = await User.findOne({
+      student_number: student_number.trim(),
+      isEmailVerified: true,
+    });
 
     if (!user) {
-      res.status(404).send({ status: 'email not found' });
+      res
+        .status(404)
+        .send({ status: 'student not found or email not verified' });
       return;
     }
 
@@ -83,7 +103,10 @@ UserAPI.post('/login', async (req, res) => {
       return;
     }
 
-    const payload = { student_id: user._id, isAdmin: user.isAdmin };
+    const payload = {
+      student_number: user.student_number,
+      isAdmin: user.isAdmin,
+    };
 
     const accessToken = jwt.sign(
       payload,
@@ -126,6 +149,48 @@ UserAPI.post('/check', async (req, res) => {
       res.status(200).send({ status: 'valid user' });
       return;
     }
+  } catch (err) {
+    res.status(400).send({ error: err.message });
+  }
+});
+
+UserAPI.post('/add_admin', async (req, res) => {
+  const { student_number } = req.body;
+  const { accesstoken } = req.headers;
+
+  try {
+    const result = jwt.verify(
+      accesstoken,
+      process.env.AUTH_ACCESS_TOKEN_SECRET
+    );
+
+    if (!result.isAdmin) {
+      res.status(406).send({ status: 'permission denied.' });
+      return;
+    }
+
+    let user = await User.findOne({
+      student_number: student_number.trim(),
+    });
+
+    if (!user) {
+      res.status(406).send({ status: 'user not found!' });
+      return;
+    }
+
+    if (!user.isEmailVerified) {
+      res.status(406).send({ status: "this user's email is not verified" });
+      return;
+    }
+
+    if (user.isAdmin) {
+      res.status(406).send({ status: 'this user was admin already.' });
+      return;
+    }
+
+    user.isAdmin = true;
+    await user.save();
+    res.status(200).send({ status: 'this user set to admin succussfully' });
   } catch (err) {
     res.status(400).send({ error: err.message });
   }
