@@ -8,12 +8,18 @@ import jwt from 'jsonwebtoken';
 import UserAPI from './User.js';
 
 UserAPI.post('/add_playlist', async (req, res) => {
-  const { email, playlist } = req.body;
+  const { playlist } = req.body;
+  const { accesstoken } = req.headers;
 
   try {
-    const user = await search(email);
+    const result = jwt.verify(
+      accesstoken,
+      process.env.AUTH_ACCESS_TOKEN_SECRET
+    );
 
-    if (user === -1) {
+    let user = await User.findOne({ student_number: result.student_number });
+
+    if (!user) {
       res.status(404).send({ status: 'email not found' });
       return;
     }
@@ -36,12 +42,17 @@ UserAPI.post('/add_playlist', async (req, res) => {
 });
 
 UserAPI.post('/get_playlist', async (req, res) => {
-  const { email } = req.body;
+  const { accesstoken } = req.headers;
 
   try {
-    let user = await search(email);
+    const result = jwt.verify(
+      accesstoken,
+      process.env.AUTH_ACCESS_TOKEN_SECRET
+    );
 
-    if (user === -1) {
+    let user = await User.findOne({ student_number: result.student_number });
+
+    if (!user) {
       res.status(404).send({ status: 'email not found' });
       return;
     }
@@ -69,14 +80,20 @@ UserAPI.post('/get_playlist', async (req, res) => {
 });
 
 UserAPI.post('/edit_playlist', async (req, res) => {
-  let { email, playlist, id } = req.body;
+  let { playlist, id } = req.body;
+  const { accesstoken } = req.headers;
   id = new ObjectId(id);
 
   try {
-    let user = await search(email);
+    const result = jwt.verify(
+      accesstoken,
+      process.env.AUTH_ACCESS_TOKEN_SECRET
+    );
 
-    if (user === -1) {
-      res.status(404).send({ status: 'email not found' });
+    let user = await User.findOne({ student_number: result.student_number });
+
+    if (!user) {
+      res.status(404).send({ status: 'user not found' });
       return;
     }
 
@@ -98,14 +115,20 @@ UserAPI.post('/edit_playlist', async (req, res) => {
 });
 
 UserAPI.delete('/delete_playlist', async (req, res) => {
-  let { email, id } = req.body;
+  let { id } = req.body;
+  const { accesstoken } = req.headers;
   id = new ObjectId(id);
 
   try {
-    let user = await search(email);
+    const result = jwt.verify(
+      accesstoken,
+      process.env.AUTH_ACCESS_TOKEN_SECRET
+    );
 
-    if (user === -1) {
-      res.status(404).send({ status: 'email not found' });
+    let user = await User.findOne({ student_number: result.student_number });
+
+    if (!user) {
+      res.status(404).send({ status: 'user not found' });
       return;
     }
 

@@ -4,12 +4,25 @@ import xlsx from 'xlsx';
 import multer from 'multer';
 import * as fs from 'fs';
 import { writeLesson } from './functions.js';
+import jwt from 'jsonwebtoken';
 
 const LessonAPI = express.Router();
 const upload = multer({ dest: 'uploads/' });
 
 LessonAPI.post('/upload', upload.single('file'), async (req, res) => {
+  const { accesstoken } = req.headers;
+
   try {
+    const result = jwt.verify(
+      accesstoken,
+      process.env.AUTH_ACCESS_TOKEN_SECRET
+    );
+
+    if (!result.isAdmin) {
+      res.status(406).send({ status: 'permission denied.' });
+      return;
+    }
+
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
@@ -37,8 +50,19 @@ LessonAPI.post('/upload', upload.single('file'), async (req, res) => {
 
 LessonAPI.post('/add', async (req, res) => {
   const { Name, time, exam_date, lesson_code } = req.body;
+  const { accesstoken } = req.headers;
 
   try {
+    const result = jwt.verify(
+      accesstoken,
+      process.env.AUTH_ACCESS_TOKEN_SECRET
+    );
+
+    if (!result.isAdmin) {
+      res.status(406).send({ status: 'permission denied.' });
+      return;
+    }
+
     let lesson = await Lesson.findOne({ Name: Name.trim() });
 
     if (!lesson) {
@@ -61,6 +85,14 @@ LessonAPI.post('/add', async (req, res) => {
 });
 
 LessonAPI.get('/all', async (req, res) => {
+  const { accesstoken } = req.headers;
+
+  try {
+    jwt.verify(accesstoken, process.env.AUTH_ACCESS_TOKEN_SECRET);
+  } catch (err) {
+    return res.status(400).send({ error: err.message });
+  }
+
   const lessens = await Lesson.find();
   lessens.sort((a, b) => a.Name.localeCompare(b.Name, 'fa'));
   res.status(200).send(lessens);

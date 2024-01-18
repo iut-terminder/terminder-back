@@ -15,6 +15,12 @@ UserAPI.get('/verify', async (req, res) => {
     );
 
     let user = await User.findOne({ student_number: student_number });
+
+    if (!user) {
+      res.status(404).send({ status: 'student not found' });
+      return;
+    }
+
     user.isEmailVerified = true;
     await user.save();
 
@@ -131,24 +137,6 @@ UserAPI.post('/login', async (req, res) => {
       refreshToken: refreshToken,
       type: user.isAdmin,
     });
-  } catch (err) {
-    res.status(400).send({ error: err.message });
-  }
-});
-
-UserAPI.post('/check', async (req, res) => {
-  const { email } = req.body;
-
-  try {
-    const user = await search(email);
-
-    if (user === -1) {
-      res.status(404).send({ status: 'email not found' });
-      return;
-    } else if (user) {
-      res.status(200).send({ status: 'valid user' });
-      return;
-    }
   } catch (err) {
     res.status(400).send({ error: err.message });
   }
