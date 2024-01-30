@@ -49,7 +49,7 @@ LessonAPI.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 LessonAPI.post('/add', async (req, res) => {
-  const { Name, time, exam_date, lesson_code } = req.body;
+  const { lesson_code } = req.body;
   const { accesstoken } = req.headers;
 
   try {
@@ -63,21 +63,16 @@ LessonAPI.post('/add', async (req, res) => {
       return;
     }
 
-    let lesson = await Lesson.findOne({ Name: Name.trim() });
+    let lesson = await Lesson.findOne({ lesson_code: lesson_code.trim() });
 
-    if (!lesson) {
-      lesson = new Lesson({
-        Name: Name.trim(),
-        times: [],
-        exam_date: exam_date.trim(),
-        lesson_code: lesson_code.trim(),
-      });
-      await lesson.save();
+    if (lesson) {
+      res.status(406).send({ status: 'Repeated lesson code.' });
+      return;
     }
 
-    lesson.times.push(time);
-    await lesson.save();
+    lesson = new Lesson({ ...req.body });
 
+    await lesson.save();
     res.status(200).send({ status: 'Lesson added succusfully' });
   } catch (err) {
     res.status(406).send({ error: err.message });
