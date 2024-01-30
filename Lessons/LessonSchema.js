@@ -9,7 +9,7 @@ const LessonShcema = new mongoose.Schema({
     start: { type: Number, default: -1 },
     end: { type: Number, default: -1 },
   },
-  lesson_code: { type: String, required: true, unique: true},
+  lesson_code: { type: String, required: true},
   group_code: { type: String, required: true },
   location: { type: String, default: '' },
   capacity: { type: Number, default: 0 },
