@@ -10,9 +10,15 @@ const UserSchema = new mongoose.Schema({
     {
       playlist: [
         {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'Lesson',
-          required: true,
+          lesson: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Lesson',
+            required: true,
+          },
+          color: {
+            type: String,
+            required: true,
+          },
         },
       ],
     },

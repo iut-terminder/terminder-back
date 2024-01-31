@@ -1,5 +1,6 @@
 import Express from 'express';
 import UserAPI from './Users/User.js';
+import PlaylistAPI from './Playlists/PlayList.js';
 import DepartmentAPI from './Department/Department.js';
 import LessonAPI from './Lessons/Lesson.js';
 import RefreshTokenAPI from './tokens/tokens.js';
@@ -17,6 +18,7 @@ app.set('view engine', 'ejs');
 
 app.use('/api/users', UserAPI);
 app.use('/api/lessons', LessonAPI);
+app.use('/api/playlists', PlaylistAPI);
 app.use('/api/departments', DepartmentAPI);
 app.use('/api/refreshtoken', RefreshTokenAPI);
 
