@@ -1,13 +1,13 @@
-import express from 'express';
-import User from './UserSchema.js';
-import RefreshToken from '../tokens/tokensSchema.js';
-import validator from 'email-validator';
-import { send_email } from '../services/mail.js';
-import jwt from 'jsonwebtoken';
+import express from "express";
+import User from "./UserSchema.js";
+import RefreshToken from "../tokens/tokensSchema.js";
+import validator from "email-validator";
+import { send_email } from "../services/mail.js";
+import jwt from "jsonwebtoken";
 
 const UserAPI = express.Router();
 
-UserAPI.get('/verify', async (req, res) => {
+UserAPI.get("/verify", async (req, res) => {
   try {
     const { student_number } = jwt.verify(
       req.query.token,
@@ -17,20 +17,20 @@ UserAPI.get('/verify', async (req, res) => {
     let user = await User.findOne({ student_number: student_number });
 
     if (!user) {
-      res.status(404).send({ status: 'student not found' });
+      res.status(404).send({ status: "student not found" });
       return;
     }
 
     user.isEmailVerified = true;
     await user.save();
 
-    res.status(200).send({ status: 'your account created successfully..' });
+    res.redirect(`${process.env.FRONT_URL}/?signup=successful`);
   } catch (err) {
-    res.status(400).send({ error: err.message });
+    res.redirect(`${process.env.FRONT_URL}/?signup=failed&err=${err}`);
   }
 });
 
-UserAPI.post('/signup', async (req, res) => {
+UserAPI.post("/signup", async (req, res) => {
   const { student_number, email, password } = req.body;
   try {
     let user = await User.findOne({
@@ -40,7 +40,7 @@ UserAPI.post('/signup', async (req, res) => {
     if (user && user.isEmailVerified) {
       res
         .status(406)
-        .send({ status: 'this student_number previously signed up' });
+        .send({ status: "this student_number previously signed up" });
       return;
     }
 
@@ -49,25 +49,25 @@ UserAPI.post('/signup', async (req, res) => {
     };
 
     const emailToken = jwt.sign(payload, process.env.AUTH_EMAIL_TOKEN_SECRET, {
-      expiresIn: '15m',
+      expiresIn: "15m",
     });
 
     if (user && !user.isEmailVerified) {
       send_email(email.trim(), emailToken);
       res.status(200).send({
         status:
-          'your account already exist but not verified. verification email was send again.',
+          "your account already exist but not verified. verification email was send again.",
       });
       return;
     }
 
     if (password.trim().length < 6)
-      throw Error('password must have 6 chcaracter');
+      throw Error("password must have 6 chcaracter");
 
-    if (!validator.validate(email.trim())) throw Error('email is not valid.');
+    if (!validator.validate(email.trim())) throw Error("email is not valid.");
 
-    if (!email.trim().endsWith('iut.ac.ir'))
-      throw Error('email must be from iut.');
+    if (!email.trim().endsWith("iut.ac.ir"))
+      throw Error("email must be from iut.");
 
     user = new User({
       student_number: student_number.trim(),
@@ -80,15 +80,14 @@ UserAPI.post('/signup', async (req, res) => {
     user.setPassword(password);
     await user.save();
 
-    send_email(email.trim(), emailToken);
-
-    res.status(200).send({ status: 'verification email was send for you.' });
+    if (await send_email(email.trim(), emailToken))
+      res.status(200).send({ status: "verification email was send for you." });
   } catch (err) {
     res.status(400).send({ error: err.message });
   }
 });
 
-UserAPI.post('/login', async (req, res) => {
+UserAPI.post("/login", async (req, res) => {
   const { student_number, password } = req.body;
 
   try {
@@ -100,12 +99,12 @@ UserAPI.post('/login', async (req, res) => {
     if (!user) {
       res
         .status(404)
-        .send({ status: 'student not found or email not verified' });
+        .send({ status: "student not found or email not verified" });
       return;
     }
 
     if (!user.validPassword(password)) {
-      res.status(406).send({ status: 'incorrect password' });
+      res.status(406).send({ status: "incorrect password" });
       return;
     }
 
@@ -142,7 +141,7 @@ UserAPI.post('/login', async (req, res) => {
   }
 });
 
-UserAPI.post('/add_admin', async (req, res) => {
+UserAPI.post("/add_admin", async (req, res) => {
   const { student_number } = req.body;
   const { accesstoken } = req.headers;
 
@@ -153,7 +152,7 @@ UserAPI.post('/add_admin', async (req, res) => {
     );
 
     if (!result.isAdmin) {
-      res.status(406).send({ status: 'permission denied.' });
+      res.status(406).send({ status: "permission denied." });
       return;
     }
 
@@ -162,7 +161,7 @@ UserAPI.post('/add_admin', async (req, res) => {
     });
 
     if (!user) {
-      res.status(406).send({ status: 'user not found!' });
+      res.status(406).send({ status: "user not found!" });
       return;
     }
 
@@ -172,13 +171,13 @@ UserAPI.post('/add_admin', async (req, res) => {
     }
 
     if (user.isAdmin) {
-      res.status(406).send({ status: 'this user was admin already.' });
+      res.status(406).send({ status: "this user was admin already." });
       return;
     }
 
     user.isAdmin = true;
     await user.save();
-    res.status(200).send({ status: 'this user set to admin succussfully' });
+    res.status(200).send({ status: "this user set to admin succussfully" });
   } catch (err) {
     res.status(400).send({ error: err.message });
   }

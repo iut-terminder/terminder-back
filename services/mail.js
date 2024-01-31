@@ -6,14 +6,14 @@ export const send_email = async (mailAdress, token) => {
   try {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
-      auth: {
+            auth: {
         user: process.env.AUTH_EMAIL_USERNAME,
         pass: process.env.AUTH_EMAIL_PASSWORD,
       },
     });
 
     const verificationLink = process.env.VERIFY_LINK + token;
-    await transporter.sendMail({
+    let mmd = await transporter.sendMail({
       from: process.env.EMAIL_FROM,
       to: mailAdress,
       subject: `تایید ایمیل برای سایت ${process.env.EMAIL_FROM}`,
@@ -21,6 +21,7 @@ export const send_email = async (mailAdress, token) => {
         verificationLink,
       }),
     });
+    return mmd;
   } catch (err) {
     throw err;
   }
