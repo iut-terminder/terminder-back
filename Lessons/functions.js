@@ -132,7 +132,7 @@ export const writeLesson = async (data, department, shouldSave) => {
       Name: lesson[1],
       lesson_code: lesson[0].slice(0, -3),
       group_code: lesson[0].slice(-2),
-      numbers: parseInt(lesson[2]) + parseInt(lesson[3]),
+      numbers: parseInt(lesson[2]),
       capacity: parseInt(lesson[4]),
       teacher: lesson[8],
       department: department,
