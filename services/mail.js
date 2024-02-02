@@ -16,7 +16,7 @@ export const send_email = async (mailAdress, token) => {
     let mmd = await transporter.sendMail({
       from: process.env.EMAIL_FROM,
       to: mailAdress,
-      subject: `تایید ایمیل برای سایت ${process.env.EMAIL_FROM}`,
+      subject: `به سایت ترمایندر خوش آمدید`,
       html: ejs.render(fs.readFileSync('template/mail.ejs', 'utf-8'), {
         verificationLink,
       }),
