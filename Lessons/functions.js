@@ -64,46 +64,49 @@ const timesDivision = arr => {
   for (const item of arr) {
     if (item == null) continue;
 
-    if (item[0] == 'ا') {
-      const { start, end } = timeDecomposition(item.slice(-11));
+    // --- امتحان
 
-      let date = item
-        .split('امتحان(')
-        .pop()
-        .slice(2, 13)
-        .replace(')', '')
-        .replace('_', '')
-        .split('.')
-        .join('/');
-      const jDate = moment(date, 'jYYYY.jMM.jDD');
-      const dayOfWeek = (jDate.day() + 1) % 7;
+    if (item.includes('امتحان')) {
+      const examRegex = /امتحان\((\d+)_(\d{4}\.\d{2}\.\d{2})\)\s*ساعت\s*:\s*(\d{2}:\d{2})-(\d{2}:\d{2})/;
+      const examMatch = item.match(examRegex);
 
-      result.exam_date = {
-        start: start,
-        end: end,
-        date: date,
-        day: dayOfWeek,
+      if (examMatch) {
+        const [, examNumber, rawDate, startStr, endStr] = examMatch;
+        const { start, end } = timeDecomposition(`${startStr}-${endStr}`);
+
+        const date = rawDate.replace(/\./g, "/");
+        const jDate = moment(date, 'jYYYY/jMM/jDD');
+        const dayOfWeek = (jDate.day() + 1) % 7;
+
+        result.exam_date = {
+          start,
+          end,
+          date,
+          day: dayOfWeek,
+          examNumber: parseInt(examNumber),
+        };
+      }
+    }
+
+    // --- کلاس یا حل تمرین
+    // داخل timesDivision
+    const classRegex = /(درس|حل تمرين)\([\u0600-\u06FF]\):\s*([\u0600-\u06FF\s]+?)\s+(\d{2}:\d{2})-(\d{2}:\d{2})(?:\s+مکان:\s*([\u0600-\u06FF0-9A-Za-z]+))?/g;
+    let match;
+    while ((match = classRegex.exec(item)) !== null) {
+      const [, type, dayStr, startStr, endStr, location] = match;
+
+      const { start, end } = timeDecomposition(`${startStr}-${endStr}`);
+
+      let record = {
+        day: determineDay(dayStr.trim()),
+        start,
+        end,
+        isExerciseSolving: type === 'حل تمرين',
       };
 
-      continue;
+      result.times.push(record);
+      result.location = location;
     }
-
-    let record = { isExerciseSolving: true };
-    let temp = item.split('): ').pop();
-    let index = temp.indexOf('-');
-    const { start, end } = timeDecomposition(temp.slice(index - 5, index + 6));
-
-    record.day = determineDay(temp);
-    record.start = start;
-    record.end = end;
-
-    if (item[0] == 'د') {
-      record.isExerciseSolving = false;
-      if (temp.split('مکان: ').length > 1)
-        result.location = temp.split('مکان: ').pop();
-    }
-
-    result.times.push(record);
   }
   return result;
 };
@@ -127,6 +130,7 @@ export const writeLesson = async (data, department, shouldSave) => {
       continue;
     }
 
+
     const arr = [lesson[11]];
     let record = new Lesson({
       Name: lesson[1],
@@ -139,11 +143,6 @@ export const writeLesson = async (data, department, shouldSave) => {
       gender: determineGender(lesson[7]),
       detail: lesson[12] ? lesson[12] : '',
     });
-
-    while (true) {
-      if (data.length == 0 || data[0][0] != null) break;
-      arr.push(data.shift()[11]);
-    }
 
     const temp = timesDivision(arr);
 
