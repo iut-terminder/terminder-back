@@ -2,6 +2,18 @@ import moment from 'moment-jalaali';
 import Lesson from './LessonSchema.js';
 import Department from '../Department/DepartmentSchema.js';
 
+const normalizePersianText = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  
+  let normalized = text;
+  
+  // تبدیل حروف ک و ی
+  normalized = normalized.replace(/[كک]/g, 'ک');
+  normalized = normalized.replace(/[يیى]/g, 'ی');
+
+  return normalized;
+};
+
 const determineGender = str => {
   switch (str) {
     case 'مختلط':
@@ -132,13 +144,17 @@ export const writeLesson = async (data, department, shouldSave) => {
 
 
     const arr = [lesson[11]];
+
+    const normalizedName = normalizePersianText(lesson[1]);
+    const normalizedTeacher = normalizePersianText(lesson[8]);
+
     let record = new Lesson({
-      Name: lesson[1],
+      Name: normalizedName,
       lesson_code: lesson[0].slice(0, -3),
       group_code: lesson[0].slice(-2),
       numbers: parseInt(lesson[2]),
       capacity: parseInt(lesson[4]),
-      teacher: lesson[8],
+      teacher: normalizedTeacher,
       department: department,
       gender: determineGender(lesson[7]),
       detail: lesson[12] ? lesson[12] : '',
