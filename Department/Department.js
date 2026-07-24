@@ -1,56 +1,39 @@
 import express from 'express';
 import Department from './DepartmentSchema.js';
-import jwt from 'jsonwebtoken';
+import { requireAuth, requireStaff } from '../middleware/auth.js';
 
 const DepartmentAPI = express.Router();
 
-DepartmentAPI.post('/add', async (req, res) => {
-  const { dept_name } = req.body;
-  const { accesstoken } = req.headers;
+// افزودن دپارتمان — فقط ادمین
+DepartmentAPI.post('/', requireAuth, requireStaff, async (req, res) => {
+  const { dept_id, dept_name } = req.body;
 
   try {
-    const result = jwt.verify(
-      accesstoken,
-      process.env.AUTH_ACCESS_TOKEN_SECRET
-    );
-
-    if (!result.isAdmin) {
-      res.status(406).send({ status: 'permission denied.' });
-      return;
+    if (dept_id === undefined || !dept_name) {
+      return res.status(400).json({ error: 'شناسه و نام دانشکده الزامی است' });
     }
 
-    let dept = await Department.findOne({ title: dept_name });
-
-    if (dept) {
-      res.status(406).send({ status: 'Repeated department' });
-      return;
+    const existing = await Department.findOne({ $or: [{ dept_id }, { dept_name: dept_name.trim() }] });
+    if (existing) {
+      return res.status(400).json({ error: 'این دانشکده قبلاً ثبت شده است' });
     }
 
-    dept = new Department({ title: dept_name.trim() });
-    await dept.save();
-    res.status(200).send({ status: 'Department added succesfully' });
+    const department = new Department({ dept_id, dept_name: dept_name.trim() });
+    await department.save();
+
+    return res.status(201).json(department);
   } catch (err) {
-    res.status(400).send({ error: err.message });
+    return res.status(400).json({ error: err.message });
   }
 });
 
-DepartmentAPI.get('/all', async (req, res) => {
-  const { accesstoken } = req.headers;
-
+DepartmentAPI.get('/', async (req, res) => {
   try {
-    jwt.verify(accesstoken, process.env.AUTH_ACCESS_TOKEN_SECRET);
+    const departments = await Department.find().sort({ dept_name: 1 });
+    return res.status(200).json(departments);
   } catch (err) {
-    return res.status(400).send({ error: err.message });
+    return res.status(400).json({ error: err.message });
   }
-
-  const dept = await Department.find();
-
-  if (!dept) {
-    res.status(404).send({ status: 'no department exist' });
-    return;
-  }
-
-  res.status(200).send(dept);
 });
 
 export default DepartmentAPI;

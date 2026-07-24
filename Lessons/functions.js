@@ -1,283 +1,112 @@
-import moment from 'moment-jalaali';
-import Lesson from './LessonSchema.js';
-import Department from '../Department/DepartmentSchema.js';
-
-const normalizePersianText = (text) => {
-  if (!text || typeof text !== 'string') return text;
-  
-  let normalized = text;
-  
-  // تبدیل حروف ک و ی
-  normalized = normalized.replace(/[كک]/g, 'ک');
-  normalized = normalized.replace(/[يیى]/g, 'ی');
-
-  return normalized;
-};
-
-const determineGender = str => {
-  switch (str) {
-    case 'مختلط':
-      return 'both';
-
-    case 'مرد':
-      return 'boy';
-
-    case 'زن':
-      return 'girl';
-
-    default:
-      return 'null';
+// استخراج نام استادها از متن مسئولیت درس، مثلاً "دکتر احمدی : استاد درس"
+export const parseInstructors = (instructorResponsibilityText) => {
+  if (!instructorResponsibilityText) return [];
+  const pattern = /([^:\n]+?)\s*:\s*استاد\s+درس/g;
+  const matches = [];
+  let m;
+  while ((m = pattern.exec(String(instructorResponsibilityText))) !== null) {
+    const name = m[1].trim();
+    if (name) matches.push(name);
   }
+  return matches;
 };
 
-const determineDay = str => {
-  switch (str[0]) {
-    case 'ش':
-      return 0;
+const DAY_MAP = {
+  'یکشنبه': 1,
+  'دوشنبه': 2,
+  'سهشنبه': 3,
+  'چهارشنبه': 4,
+  'پنجشنبه': 5,
+  'جمعه': 6,
+  'شنبه': 0,
+};
 
-    case 'ي':
-      return 1;
+export const parseScheduleAndExam = (timeText) => {
+  const timesList = [];
+  let examInfo = {};
 
-    case 'د':
-      return 2;
+  if (!timeText) return { timesList, examInfo };
 
-    case 'س':
-      return 3;
+  // ۱. پاک‌سازی فاصله‌های اضافی و یکدست‌سازی متن
+  const text = String(timeText).split(/\s+/).filter(Boolean).join(' ');
 
-    case 'چ':
-      return 4;
+  // ۲. پیدا کردن نقاط شروع هر بخش (درس تئوری، عملی، حل تمرین یا امتحان)
+  const delimiterPattern = /(درس\(ت\):|درس\(ع\):|درس\(ح\):|حل تمرین:|امتحان\([^)]+\))/;
+  const tokens = text.split(delimiterPattern).map((t) => t.trim()).filter(Boolean);
 
-    case 'پ':
-      return 5;
+  const headerPattern = /^(درس\(.\):|حل تمرین:|امتحان\([^)]+\))$/;
 
-    default:
-      return -1;
+  const parts = [];
+  let currentHeader = '';
+
+  for (const token of tokens) {
+    if (headerPattern.test(token)) {
+      currentHeader = token;
+    } else if (currentHeader) {
+      parts.push(`${currentHeader} ${token}`);
+      currentHeader = '';
+    } else {
+      parts.push(token);
+    }
   }
-};
 
-const timeDecomposition = str => {
-  let times = str.split('-');
+  if (currentHeader && currentHeader.startsWith('امتحان')) {
+    parts.push(currentHeader);
+  }
 
-  let start = parseInt(times[0].replace(':', ''));
-  start = start % 100 == 30 ? start + 20 : start;
-  let end = parseInt(times[1].replace(':', ''));
-  end = end % 100 == 30 ? end + 20 : end;
+  // ۳. پردازش هر بخش به‌صورت مجزا
+  for (const rawPart of parts) {
+    const part = rawPart.trim();
 
-  return { start: start, end: end };
-};
+    if (part.includes('امتحان')) {
+      const examDateMatch = part.match(/امتحان\((.*?)\)/);
+      const examTimeMatch = part.match(/ساعت\s*:\s*([\d:]+)-([\d:]+)/);
 
-const timesDivision = arr => {
-  const result = {
-    times: [],
-    location: '',
-    exam_date: { day: -1, date: '0', start: -1, end: -1 },
-  };
-
-  for (const item of arr) {
-    if (item == null) continue;
-
-    // --- امتحان
-
-    if (item.includes('امتحان')) {
-      const examRegex = /امتحان\((\d+)_(\d{4}\.\d{2}\.\d{2})\)\s*ساعت\s*:\s*(\d{2}:\d{2})-(\d{2}:\d{2})/;
-      const examMatch = item.match(examRegex);
-
-      if (examMatch) {
-        const [, examNumber, rawDate, startStr, endStr] = examMatch;
-        const { start, end } = timeDecomposition(`${startStr}-${endStr}`);
-
-        const date = rawDate.replace(/\./g, "/");
-        const jDate = moment(date, 'jYYYY/jMM/jDD');
-        const dayOfWeek = (jDate.day() + 1) % 7;
-
-        result.exam_date = {
-          start,
-          end,
-          date,
-          day: dayOfWeek,
-          examNumber: parseInt(examNumber),
-        };
+      if (examDateMatch) {
+        const rawDate = examDateMatch[1].trim();
+        examInfo.date = rawDate.includes('_') ? rawDate.split('_')[1].trim() : rawDate;
       }
-    }
+      if (examTimeMatch) {
+        examInfo.start_time = examTimeMatch[1].trim();
+        examInfo.end_time = examTimeMatch[2].trim();
+      }
+    } else {
+      const isExercise = part.includes('حل تمرین') || part.includes('(ح)');
 
-    // --- کلاس یا حل تمرین
-    // داخل timesDivision
-    const classRegex = /(درس|حل تمرين)\([\u0600-\u06FF]\):\s*([\u0600-\u06FF\s]+?)\s+(\d{2}:\d{2})-(\d{2}:\d{2})(?:\s+مکان:\s*([\u0600-\u06FF0-9A-Za-z]+))?/g;
-    let match;
-    while ((match = classRegex.exec(item)) !== null) {
-      const [, type, dayStr, startStr, endStr, location] = match;
+      const cleanPartForDay = part.replace(/ /g, '').replace(/\u200c/g, '').replace(/\u200f/g, '');
 
-      const { start, end } = timeDecomposition(`${startStr}-${endStr}`);
+      let dayFound = null;
+      for (const [dayName, dayNum] of Object.entries(DAY_MAP)) {
+        if (cleanPartForDay.includes(dayName)) {
+          dayFound = dayNum;
+          break;
+        }
+      }
 
-      let record = {
-        day: determineDay(dayStr.trim()),
-        start,
-        end,
-        isExerciseSolving: type === 'حل تمرين',
-      };
+      const timeMatch = part.match(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);
 
-      result.times.push(record);
-      result.location = location;
-    }
-  }
-  return result;
-};
+      if (dayFound !== null && timeMatch) {
+        let [, startStr, endStr] = timeMatch;
+        if (startStr.split(':')[0].length === 1) startStr = `0${startStr}`;
+        if (endStr.split(':')[0].length === 1) endStr = `0${endStr}`;
 
-export const writeLesson = async (data, department, shouldSave) => {
-  const retObj = {
-    changePerformed: shouldSave,
-    tot: 0,
-    repeated: 0,
-    new: 0,
-    updated: 0,
-    withoutTime: 0,
-  };
-  const arrayResult = [];
-
-  while (data.length > 0) {
-    let lesson = data.shift();
-
-    if (lesson[11] == undefined) {
-      retObj.withoutTime++;
-      continue;
-    }
-
-
-    const arr = [lesson[11]];
-
-    const normalizedName = normalizePersianText(lesson[1]);
-    const normalizedTeacher = normalizePersianText(lesson[8]);
-
-    let record = new Lesson({
-      Name: normalizedName,
-      lesson_code: lesson[0].slice(0, -3),
-      group_code: lesson[0].slice(-2),
-      numbers: parseInt(lesson[2]),
-      capacity: parseInt(lesson[4]),
-      teacher: normalizedTeacher,
-      department: department,
-      gender: determineGender(lesson[7]),
-      detail: lesson[12] ? lesson[12] : '',
-    });
-
-    const temp = timesDivision(arr);
-
-    record.times = temp.times;
-    record.exam_date = temp.exam_date;
-    record.location = temp.location;
-
-    record = await checkExistRecord(record, shouldSave);
-    arrayResult.push(record);
-
-    if (record.type == 'new') retObj.new++;
-    if (record.type == 'updated') retObj.updated++;
-    if (record.type == 'repeated') retObj.repeated++;
-  }
-
-  retObj.tot = retObj.new + retObj.updated + retObj.repeated;
-  return { status: retObj, records: arrayResult };
-};
-
-async function checkExistRecord(record, isSave = true) {
-  let res = await Lesson.findOne({
-    lesson_code: record.lesson_code,
-    group_code: record.group_code,
-  });
-
-  let dept = await Department.findOne({ _id: record.department });
-
-  if (!res) {
-    if (isSave) await record.save();
-    record = record.toObject();
-    record.department = dept.title;
-    return { type: 'new', record: record };
-  }
-
-  let sameRecord = true;
-
-  if (res.Name != record.Name) {
-    res.Name = record.Name;
-    sameRecord = false;
-  }
-
-  if (!areObjectsEqual(res.exam_date, record.exam_date)) {
-    res.exam_date = record.exam_date;
-    sameRecord = false;
-  }
-
-  if (res.location != record.location) {
-    res.location = record.location;
-    sameRecord = false;
-  }
-
-  if (res.capacity != record.capacity) {
-    res.capacity = record.capacity;
-    sameRecord = false;
-  }
-
-  if (res.gender != record.gender) {
-    res.gender = record.gender;
-    sameRecord = false;
-  }
-
-  if (res.teacher != record.teacher) {
-    res.teacher = record.teacher;
-    sameRecord = false;
-  }
-
-  if (!res.department.equals(record.department)) {
-    res.department = record.department;
-    sameRecord = false;
-  }
-
-  if (res.detail != record.detail) {
-    res.detail = record.detail;
-    sameRecord = false;
-  }
-
-  if (res.times.length != record.times.length) {
-    res.times = record.times;
-    sameRecord = false;
-  } else {
-    for (let i = 0; i < res.times.length; i++) {
-      if (
-        res.times[i].day != record.times[i].day ||
-        res.times[i].start != record.times[i].start ||
-        res.times[i].end != record.times[i].end ||
-        res.times[i].isExerciseSolving != record.times[i].isExerciseSolving
-      ) {
-        res.times = record.times;
-        sameRecord = false;
-        break;
+        timesList.push({
+          day: dayFound,
+          start: startStr,
+          end: endStr,
+          isExerciseSolving: isExercise,
+        });
       }
     }
   }
 
-  if (sameRecord) {
-    record = record.toObject();
-    record.department = dept.title;
-    return { type: 'repeated', record: record };
-  } else {
-    if (isSave) await res.save();
-    res = res.toObject();
-    res.department = dept.title;
-    return { type: 'updated', record: res };
-  }
-}
+  return { timesList, examInfo };
+};
 
-function areObjectsEqual(obj1, obj2) {
-  const keys1 = Object.keys(obj1);
-  const keys2 = Object.keys(obj2);
-
-  if (keys1.length !== keys2.length) {
-    return false;
-  }
-
-  for (const key of keys1) {
-    if (obj1[key] !== obj2[key]) {
-      return false;
-    }
-  }
-
-  return true;
-}
+/**
+ * تبدیل حروف عربی (ي و ك) به حروف استاندارد فارسی (ی و ک)
+ */
+export const normalizeFaText = (text) => {
+  if (!text) return '';
+  return String(text).replace(/ي/g, 'ی').replace(/ك/g, 'ک').trim();
+};

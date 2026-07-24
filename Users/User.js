@@ -1,185 +1,215 @@
-import express from "express";
-import User from "./UserSchema.js";
-import RefreshToken from "../tokens/tokensSchema.js";
-import validator from "email-validator";
-import { send_email } from "../services/mail.js";
-import jwt from "jsonwebtoken";
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import validator from 'email-validator';
+import User from './UserSchema.js';
+import RefreshToken from '../tokens/tokensSchema.js';
+import { requireAuth } from '../middleware/auth.js';
+import { sendActivationEmail, sendPasswordResetEmail } from '../services/mail.js';
 
 const UserAPI = express.Router();
 
-UserAPI.get("/verify", async (req, res) => {
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+// ---------- ثبت‌نام ----------
+UserAPI.post('/register', async (req, res) => {
+  const { student_no, first_name, last_name, email, phone, password } = req.body;
+
   try {
-    const { student_number } = jwt.verify(
-      req.query.token,
-      process.env.AUTH_EMAIL_TOKEN_SECRET
-    );
-
-    let user = await User.findOne({ student_number: student_number });
-
-    if (!user) {
-      res.status(404).send({ status: "student not found" });
-      return;
+    if (!student_no || !email || !password) {
+      return res.status(400).json({ error: 'همه‌ی فیلدهای الزامی را پر کنید' });
     }
 
-    user.isEmailVerified = true;
+    if (String(password).trim().length < 6) {
+      return res.status(400).json({ error: 'رمز عبور باید حداقل ۶ کاراکتر باشد' });
+    }
+
+    if (!validator.validate(String(email).trim())) {
+      return res.status(400).json({ error: 'ایمیل وارد شده معتبر نیست' });
+    }
+
+    const existing = await User.findOne({ student_no: String(student_no).trim() });
+    if (existing) {
+      return res.status(400).json({ error: 'این شماره دانشجویی قبلاً ثبت‌نام کرده است' });
+    }
+
+    const user = new User({
+      student_no: String(student_no).trim(),
+      first_name: first_name && String(first_name).trim() ? String(first_name).trim() : null,
+      last_name: last_name && String(last_name).trim() ? String(last_name).trim() : null,
+      email: String(email).trim(),
+      phone: phone ? String(phone).trim() : null,
+      is_active: false,
+      is_staff: false,
+    });
+    await user.setPassword(password);
     await user.save();
 
-    res.redirect(`${process.env.FRONT_URL}/?signup=successful`);
-  } catch (err) {
-    res.redirect(`${process.env.FRONT_URL}/?signup=failed&err=${err}`);
-  }
-});
+    try {
+      const activationToken = jwt.sign(
+        { userId: user._id.toString() },
+        process.env.AUTH_EMAIL_TOKEN_SECRET,
+        { expiresIn: '1d' }
+      );
+      const activationLink = `${FRONTEND_URL}/#/verify-email/${user._id}/${activationToken}`;
+      await sendActivationEmail(user.email, activationLink);
 
-UserAPI.post("/signup", async (req, res) => {
-  const { student_number, email, password } = req.body;
-  try {
-    let user = await User.findOne({
-      student_number: student_number.trim(),
-    });
-
-    if (user && user.isEmailVerified) {
-      res
-        .status(406)
-        .send({ status: "this student_number previously signed up" });
-      return;
-    }
-
-    const payload = {
-      student_number: student_number.trim(),
-    };
-
-    const emailToken = jwt.sign(payload, process.env.AUTH_EMAIL_TOKEN_SECRET, {
-      expiresIn: "15m",
-    });
-
-    if (user && !user.isEmailVerified) {
-      send_email(email.trim(), emailToken);
-      res.status(200).send({
-        status:
-          "your account already exist but not verified. verification email was send again.",
+      return res.status(201).json({
+        message: 'ثبت‌نام با موفقیت انجام شد. لینک فعال‌سازی به ایمیل شما ارسال گردید',
       });
-      return;
+    } catch (mailErr) {
+      await User.deleteOne({ _id: user._id });
+      return res.status(500).json({ error: `خطا در ارسال ایمیل فعال‌سازی: ${mailErr.message}` });
     }
-
-    if (password.trim().length < 6)
-      throw Error("password must have 6 chcaracter");
-
-    if (!validator.validate(email.trim())) throw Error("email is not valid.");
-
-    if (!email.trim().endsWith("iut.ac.ir"))
-      throw Error("email must be from iut.");
-
-    user = new User({
-      student_number: student_number.trim(),
-      email: email.trim(),
-      isAdmin: false,
-      isEmailVerified: false,
-      playlists: [],
-    });
-
-    user.setPassword(password);
-    await user.save();
-
-    if (await send_email(email.trim(), emailToken))
-      res.status(200).send({ status: "verification email was send for you." });
   } catch (err) {
-    res.status(400).send({ error: err.message });
+    return res.status(400).json({ error: err.message });
   }
 });
 
-UserAPI.post("/login", async (req, res) => {
-  const { student_number, password } = req.body;
+// ---------- تایید ایمیل ----------
+UserAPI.post('/verify-email/:userId/:token', async (req, res) => {
+  const { userId, token } = req.params;
 
   try {
-    const user = await User.findOne({
-      student_number: student_number.trim(),
-      isEmailVerified: true,
-    });
-
-    if (!user) {
-      res
-        .status(404)
-        .send({ status: "student not found or email not verified" });
-      return;
+    const payload = jwt.verify(token, process.env.AUTH_EMAIL_TOKEN_SECRET);
+    if (payload.userId !== userId) {
+      return res.status(400).json({ error: 'لینک تایید نامعتبر یا منقضی شده است' });
     }
 
-    if (!user.validPassword(password)) {
-      res.status(406).send({ status: "incorrect password" });
-      return;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(400).json({ error: 'لینک تایید نامعتبر یا منقضی شده است' });
+    }
+
+    if (user.is_active) {
+      return res.status(400).json({ message: 'این حساب کاربری قبلاً فعال شده است' });
+    }
+
+    user.is_active = true;
+    await user.save();
+
+    return res.status(200).json({ message: 'حساب کاربری شما با موفقیت فعال شد. اکنون می‌توانید لاگین کنید' });
+  } catch (err) {
+    return res.status(400).json({ error: 'لینک تایید نامعتبر یا منقضی شده است' });
+  }
+});
+
+// ---------- لاگین ----------
+UserAPI.post('/login', async (req, res) => {
+  const { student_no, password } = req.body;
+
+  try {
+    const user = await User.findOne({ student_no: String(student_no || '').trim() });
+
+    if (!user || !user.is_active) {
+      return res.status(404).json({ detail: 'شماره دانشجویی یا رمز عبور اشتباه است' });
+    }
+
+    const isValid = await user.validPassword(password);
+    if (!isValid) {
+      return res.status(401).json({ detail: 'شماره دانشجویی یا رمز عبور اشتباه است' });
     }
 
     const payload = {
-      student_number: user.student_number,
-      isAdmin: user.isAdmin,
+      id: user._id.toString(),
+      student_no: user.student_no,
+      is_staff: user.is_staff,
+      fullname: `${user.first_name} ${user.last_name}`,
     };
 
-    const accessToken = jwt.sign(
-      payload,
-      process.env.AUTH_ACCESS_TOKEN_SECRET,
-      { expiresIn: process.env.AUTH_ACCESS_TOKEN_EXPIRY }
-    );
-
-    const refreshToken = jwt.sign(
-      payload,
-      process.env.AUTH_REFRESH_TOKEN_SECRET,
-      { expiresIn: process.env.AUTH_REFRESH_TOKEN_EXPIRY }
-    );
-
-    const refreshT = new RefreshToken({
-      userId: user._id,
-      token: refreshToken,
+    const accessToken = jwt.sign(payload, process.env.AUTH_ACCESS_TOKEN_SECRET, {
+      expiresIn: process.env.AUTH_ACCESS_TOKEN_EXPIRY || '1h',
     });
-    await refreshT.save();
-
-    res.status(200).send({
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      type: user.isAdmin,
+    const refreshToken = jwt.sign(payload, process.env.AUTH_REFRESH_TOKEN_SECRET, {
+      expiresIn: process.env.AUTH_REFRESH_TOKEN_EXPIRY || '1d',
     });
+
+    await RefreshToken.create({ userId: user._id, token: refreshToken });
+
+    return res.status(200).json({ access: accessToken, refresh: refreshToken });
   } catch (err) {
-    res.status(400).send({ error: err.message });
+    return res.status(400).json({ error: err.message });
   }
 });
 
-UserAPI.post("/add_admin", async (req, res) => {
-  const { student_number } = req.body;
-  const { accesstoken } = req.headers;
+// ---------- درخواست بازنشانی رمز عبور ----------
+UserAPI.post('/request-password-reset', async (req, res) => {
+  const { student_no } = req.body;
+  const genericMessage = {
+    message: 'در صورتی که این شماره دانشجویی در سامانه ثبت شده باشد، لینک بازنشانی رمز عبور به ایمیل مرتبط با آن ارسال خواهد شد',
+  };
+  try {
+    if (!student_no) {
+      return res.status(400).json({ error: 'شماره دانشجویی الزامی است' });
+    }
+
+    const user = await User.findOne({ student_no: String(student_no).trim() });
+    if (!user || !user.is_active) {
+      return res.status(200).json(genericMessage);
+    }
+
+    try {
+      const resetToken = jwt.sign(
+        { userId: user._id.toString(), passwordHash: user.password_hash },
+        process.env.AUTH_RESET_TOKEN_SECRET,
+        { expiresIn: '1h' }
+      );
+      const resetLink = `${FRONTEND_URL}/#/reset-password/${user._id}/${resetToken}`;
+      await sendPasswordResetEmail(user.email, resetLink);
+    } catch (mailErr) {
+      return res.status(400).json(mailErr);
+    }
+
+    return res.status(200).json(genericMessage);
+  } catch (err) {
+    return res.status(400).json(err);
+  }
+});
+
+// ---------- تایید و اعمال رمز عبور جدید ----------
+UserAPI.post('/reset-password/:userId/:token', async (req, res) => {
+  const { userId, token } = req.params;
+  const { new_password1, new_password2 } = req.body;
 
   try {
-    const result = jwt.verify(
-      accesstoken,
-      process.env.AUTH_ACCESS_TOKEN_SECRET
-    );
-
-    if (!result.isAdmin) {
-      res.status(406).send({ status: "permission denied." });
-      return;
+    const payload = jwt.verify(token, process.env.AUTH_RESET_TOKEN_SECRET);
+    if (payload.userId !== userId) {
+      return res.status(400).json({ error: 'لینک بازنشانی رمز عبور نامعتبر یا منقضی شده است' });
     }
 
-    let user = await User.findOne({
-      student_number: student_number.trim(),
-    });
-
-    if (!user) {
-      res.status(406).send({ status: "user not found!" });
-      return;
+    const user = await User.findById(userId);
+    if (!user || payload.passwordHash !== user.password_hash) {
+      return res.status(400).json({ error: 'لینک بازنشانی رمز عبور نامعتبر یا منقضی شده است' });
     }
 
-    if (!user.isEmailVerified) {
-      res.status(406).send({ status: "this user's email is not verified" });
-      return;
+    if (!new_password1 || !new_password2) {
+      return res.status(400).json({ error: 'رمز عبور جدید و تکرار آن الزامی است' });
+    }
+    if (new_password1 !== new_password2) {
+      return res.status(400).json({ new_password2: ['رمز عبور و تکرار آن یکسان نیستند'] });
+    }
+    if (String(new_password1).trim().length < 6) {
+      return res.status(400).json({ new_password1: ['رمز عبور باید حداقل ۶ کاراکتر باشد'] });
     }
 
-    if (user.isAdmin) {
-      res.status(406).send({ status: "this user was admin already." });
-      return;
-    }
-
-    user.isAdmin = true;
+    await user.setPassword(new_password1);
     await user.save();
-    res.status(200).send({ status: "this user set to admin succussfully" });
+
+    return res.status(200).json({ message: 'رمز عبور شما با موفقیت تغییر کرد. اکنون می‌توانید با رمز جدید وارد شوید' });
   } catch (err) {
-    res.status(400).send({ error: err.message });
+    return res.status(400).json({ error: 'لینک بازنشانی رمز عبور نامعتبر یا منقضی شده است' });
+  }
+});
+
+// ---------- پروفایل کاربر لاگین‌شده ----------
+UserAPI.get('/profile', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password_hash');
+    if (!user) {
+      return res.status(404).json({ error: 'کاربر یافت نشد' });
+    }
+    return res.status(200).json(user);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
   }
 });
 

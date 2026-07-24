@@ -1,25 +1,23 @@
-import Express from 'express';
-import UserAPI from './Users/User.js';
-import PlaylistAPI from './Playlists/PlayList.js';
-import DepartmentAPI from './Department/Department.js';
-import LessonAPI from './Lessons/Lesson.js';
-import RefreshTokenAPI from './tokens/tokens.js';
+import express from 'express';
 import cors from 'cors';
-import bodyParser from 'body-parser';
-import path from 'path';
+import UserAPI from './Users/User.js';
+import RefreshTokenAPI from './tokens/tokens.js';
+import DepartmentAPI from './Department/Department.js';
+import InstructorAPI from './Instructor/Instructor.js';
+import LessonAPI from './Lessons/Lesson.js';
+import ScheduleAPI from './Schedules/Schedule.js';
 
-const app = Express();
-app.use(bodyParser.urlencoded({ extended: true }));
+const app = express();
 
 app.use(cors());
-app.use(Express.json());
-app.set('views', path.join('templete', 'views'));
-app.set('view engine', 'ejs');
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/users', UserAPI);
-app.use('/api/lessons', LessonAPI);
-app.use('/api/playlists', PlaylistAPI);
-app.use('/api/departments', DepartmentAPI);
 app.use('/api/refreshtoken', RefreshTokenAPI);
+app.use('/api/department', DepartmentAPI);
+app.use('/api/instructors', InstructorAPI);
+app.use('/api/lessons', LessonAPI);
+app.use('/api/schedules', ScheduleAPI);
 
 export default app;

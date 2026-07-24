@@ -1,42 +1,31 @@
 import mongoose from 'mongoose';
-import Department from '../Department/DepartmentSchema.js';
 
-const LessonShcema = new mongoose.Schema({
-  Name: { type: String, required: true },
-  exam_date: {
-    day: { type: Number, default: -1, enum: [-1, 0, 1, 2, 3, 4, 5, 6] },
-    date: { type: String, default: '' },
-    start: { type: Number, default: -1 },
-    end: { type: Number, default: -1 },
-  },
-  lesson_code: { type: String, required: true},
-  group_code: { type: String, required: true },
-  location: { type: String, default: '' },
-  capacity: { type: Number, default: 0 },
-  gender: {
-    type: String,
-    required: true,
-    enum: ['girl', 'boy', 'both', 'null'],
-  },
-  numbers: { type: Number, default: 0 },
-  teacher: { type: String, required: true },
-  department: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Department',
-    require: true,
-  },
-  detail: { type: String, default: '' },
-
+const LessonSchema = new mongoose.Schema({
+  lesson_id: { type: String, required: true, unique: true },
+  lesson_name: { type: String, required: true },
+  department_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', required: true },
+  credit: { type: Number, required: true },
+  active_credit: { type: Number, required: true },
+  capacity: { type: Number, default: null },
+  gender: { type: Number, enum: [0, 1, 2], default: 0 }, // 0=مختلط، 1=مرد، 2=زن
+  instructors_list: { type: [String], default: [] },
   times: [
     {
       day: { type: Number, required: true, enum: [0, 1, 2, 3, 4, 5, 6] },
-      start: { type: Number, required: true },
-      end: { type: Number, required: true },
-      isExerciseSolving: { type: Boolean, required: true },
+      start: { type: String, required: true },
+      end: { type: String, required: true },
+      isExerciseSolving: { type: Boolean, default: false },
     },
   ],
-});
+  exam_time: {
+    date: { type: String, default: '' },
+    start_time: { type: String, default: '' },
+    end_time: { type: String, default: '' },
+  },
+  description: { type: String, default: '' },
+  is_active: { type: Boolean, default: true },
+}, { timestamps: true });
 
-const Lesson = mongoose.model('Lesson', LessonShcema);
+const Lesson = mongoose.model('Lesson', LessonSchema);
 
 export default Lesson;

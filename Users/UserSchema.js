@@ -1,49 +1,35 @@
 import mongoose from 'mongoose';
-import crypto from 'crypto';
+import bcrypt from 'bcrypt';
+
+const ScheduleItemSchema = new mongoose.Schema({
+  lesson: { type: mongoose.Schema.Types.ObjectId, ref: 'Lesson', required: true },
+  color: { type: String, default: '#248F24' },
+}, { _id: false });
+
+const SavedScheduleSchema = new mongoose.Schema({
+  title: { type: String, default: 'برنامه من' },
+  items: { type: [ScheduleItemSchema], default: [] },
+}, { timestamps: true });
 
 const UserSchema = new mongoose.Schema({
-  student_number: { type: String, required: true },
+  student_no: { type: String, required: true, unique: true },
+  first_name: { type: String, required: false },
+  last_name: { type: String, required: false },
   email: { type: String, required: true },
-  isAdmin: { type: Boolean, required: true },
-  isEmailVerified: { type: Boolean, default: false, required: true },
-  playlists: [
-    {
-      playlist: [
-        {
-          lesson: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Lesson',
-            required: true,
-          },
-          color: {
-            type: String,
-            required: true,
-          },
-        },
-      ],
-    },
-  ],
-  hash: { type: String, required: true },
-  salt: { type: String, required: true },
-});
+  phone: { type: String, default: null },
+  password_hash: { type: String, required: true },
+  is_active: { type: Boolean, default: false },
+  is_staff: { type: Boolean, default: false },
+  schedules: { type: [SavedScheduleSchema], default: [] },
+}, { timestamps: true });
 
-// Method to set salt and hash the password for a user
-UserSchema.methods.setPassword = function (password) {
-  // Creating a unique salt for a particular user
-  this.salt = crypto.randomBytes(16).toString('hex');
-
-  // Hashing user's salt and password with 1000 iterations,
-  this.hash = crypto
-    .pbkdf2Sync(password, this.salt, 1000, 64, `sha512`)
-    .toString(`hex`);
+UserSchema.methods.setPassword = async function (password) {
+  const salt = await bcrypt.genSalt(10);
+  this.password_hash = await bcrypt.hash(password, salt);
 };
 
-// Method to check the entered password is correct or not
-UserSchema.methods.validPassword = function (password) {
-  var hash = crypto
-    .pbkdf2Sync(password, this.salt, 1000, 64, `sha512`)
-    .toString(`hex`);
-  return this.hash === hash;
+UserSchema.methods.validPassword = async function (password) {
+  return bcrypt.compare(password, this.password_hash);
 };
 
 const User = mongoose.model('User', UserSchema);

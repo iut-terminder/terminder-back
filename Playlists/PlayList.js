@@ -19,7 +19,7 @@ PlaylistAPI.post('/add_playlist', async (req, res) => {
   try {
     // 1. بررسی accesstoken
     if (!accesstoken) {
-      console.log("❌ توکن ارسال نشده");
+      //console.log("❌ توکن ارسال نشده");
       return res.status(401).send({ error: 'Token required' });
     }
 
@@ -28,11 +28,11 @@ PlaylistAPI.post('/add_playlist', async (req, res) => {
       process.env.AUTH_ACCESS_TOKEN_SECRET
     );
     
-    console.log("✅ توکن معتبر برای کاربر:", result.student_number);
+    //console.log("✅ توکن معتبر برای کاربر:", result.student_number);
 
     // 2. پیدا کردن کاربر
     let user = await User.findOne({ student_number: result.student_number });
-    console.log("👤 کاربر یافت شد؟", !!user);
+    //console.log("👤 کاربر یافت شد؟", !!user);
 
     if (!user) {
       return res.status(404).send({ status: 'user not found' });
@@ -44,7 +44,7 @@ PlaylistAPI.post('/add_playlist', async (req, res) => {
     }
 
     // 4. اعتبارسنجی و ساخت playlist
-    console.log("🎨 پردازش playlist دریافتی:", playlist);
+    //console.log("🎨 پردازش playlist دریافتی:", playlist);
     
     // رنگ پیش‌فرض - حل مشکل #
     const defaultColor = process.env.DEFAULT_COLOR 
@@ -53,10 +53,10 @@ PlaylistAPI.post('/add_playlist', async (req, res) => {
           : `#${process.env.DEFAULT_COLOR}`)
       : "#248F24";
     
-    console.log("🎨 رنگ پیش‌فرض نهایی:", defaultColor);
+    //console.log("🎨 رنگ پیش‌فرض نهایی:", defaultColor);
 
     const validatedPlaylist = playlist.map((item, index) => {
-      console.log(`📝 آیتم ${index + 1}:`, item);
+      //console.log(`📝 آیتم ${index + 1}:`, item);
       
       // بررسی lesson
       if (!item.lesson || typeof item.lesson !== 'string') {
@@ -74,13 +74,13 @@ PlaylistAPI.post('/add_playlist', async (req, res) => {
       };
     });
 
-    console.log("✅ playlist معتبر شده:", validatedPlaylist);
+    //console.log("✅ playlist معتبر شده:", validatedPlaylist);
 
     // 5. ذخیره
     user.playlists.push({ playlist: validatedPlaylist });
     await user.save();
 
-    console.log("💾 ذخیره در دیتابیس موفقیت‌آمیز");
+    //console.log("💾 ذخیره در دیتابیس موفقیت‌آمیز");
 
     return res.status(200).send({
       status: 'complete successfully',

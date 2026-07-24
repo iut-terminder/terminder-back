@@ -1,7 +1,6 @@
 import express from 'express';
-import RefreshToken from './tokensSchema.js';
-import { send_email } from '../services/mail.js';
 import jwt from 'jsonwebtoken';
+import RefreshToken from './tokensSchema.js';
 import User from '../Users/UserSchema.js';
 
 const RefreshTokenAPI = express.Router();
@@ -10,32 +9,36 @@ RefreshTokenAPI.post('/refresh', async (req, res) => {
   const { refreshToken } = req.body;
 
   try {
-    const tokenRecord = await RefreshToken.findOne({
-      token: refreshToken.trim(),
-    });
-
-    if (!tokenRecord) {
-      res.status(404).send({ status: 'Invalid token' });
-      return;
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'رفرش توکن الزامی است' });
     }
 
-    const payload = jwt.verify(
-      refreshToken,
-      process.env.AUTH_REFRESH_TOKEN_SECRET
-    );
+    const tokenRecord = await RefreshToken.findOne({ token: String(refreshToken).trim() });
+    if (!tokenRecord) {
+      return res.status(401).json({ error: 'رفرش توکن نامعتبر است' });
+    }
 
-    const accessToken = jwt.sign(
-      { student_id: payload.student_id, isAdmin: payload.isAdmin },
+    const payload = jwt.verify(refreshToken, process.env.AUTH_REFRESH_TOKEN_SECRET);
+
+    const user = await User.findById(payload.id);
+    if (!user) {
+      return res.status(401).json({ error: 'کاربر یافت نشد' });
+    }
+
+    const newAccessToken = jwt.sign(
+      {
+        id: user._id.toString(),
+        student_no: user.student_no,
+        is_staff: user.is_staff,
+        fullname: `${user.first_name} ${user.last_name}`,
+      },
       process.env.AUTH_ACCESS_TOKEN_SECRET,
-      { expiresIn: process.env.AUTH_ACCESS_TOKEN_EXPIRY }
+      { expiresIn: process.env.AUTH_ACCESS_TOKEN_EXPIRY || '1h' }
     );
 
-    res.status(200).send({
-      accessToken: accessToken,
-      type: payload.isAdmin,
-    });
+    return res.status(200).json({ access: newAccessToken });
   } catch (err) {
-    res.status(400).send({ error: err.message });
+    return res.status(401).json({ error: 'رفرش توکن نامعتبر یا منقضی شده است' });
   }
 });
 
@@ -43,25 +46,15 @@ RefreshTokenAPI.post('/delete', async (req, res) => {
   const { refreshToken } = req.body;
 
   try {
-    const tokenRecord = await RefreshToken.findOne({
-      token: refreshToken.trim(),
-    });
-
+    const tokenRecord = await RefreshToken.findOne({ token: String(refreshToken || '').trim() });
     if (!tokenRecord) {
-      res.status(404).send({ status: 'Invalid token' });
-      return;
+      return res.status(404).json({ error: 'توکن یافت نشد' });
     }
 
-    const payload = jwt.verify(
-      refreshToken,
-      process.env.AUTH_REFRESH_TOKEN_SECRET
-    );
-
     await tokenRecord.deleteOne();
-
-    res.status(200).send({ status: 'logout successfully.' });
+    return res.status(200).json({ message: 'خروج با موفقیت انجام شد' });
   } catch (err) {
-    res.status(400).send({ error: err.message });
+    return res.status(400).json({ error: err.message });
   }
 });
 

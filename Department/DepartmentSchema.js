@@ -1,9 +1,10 @@
 import mongoose from 'mongoose';
 
-const DepartmentShcema = new mongoose.Schema({
-  title: { type: String, required: true },
+const DepartmentSchema = new mongoose.Schema({
+  dept_id: { type: Number, required: true, unique: true },
+  dept_name: { type: String, required: true },
 });
 
-const Department = mongoose.model('Department', DepartmentShcema);
+const Department = mongoose.model('Department', DepartmentSchema);
 
 export default Department;
