@@ -56,7 +56,13 @@ LessonAPI.post('/upload-lessons', requireAuth, requireStaff, upload.single('exce
       return res.status(400).json({ error: 'فایل اکسل الزامی است' });
     }
 
-    const departmentIdNum = Number(department_id);
+    let departmentId = Number(department_id);
+    //console.log(departmentId)
+    if (departmentId != departmentId % 100) {
+      departmentId = Math.floor(departmentId / 10)
+    }
+    //console.log(departmentId);
+    let departmentIdNum = Number(department_id)
     const department = await Department.findOne({ dept_id: departmentIdNum });
     if (!department) {
       return res.status(404).json({ error: 'دانشکده‌ی مورد نظر یافت نشد' });
@@ -116,7 +122,7 @@ LessonAPI.post('/upload-lessons', requireAuth, requireStaff, upload.single('exce
         const description = cell(12) !== null ? normalizeFaText(cell(12)) : '';
 
         // درس باید متعلق به همین دانشکده باشد (بر اساس کد درس)
-        if (Math.floor(parseInt(lessonId, 10) / 10000000) !== departmentIdNum) {
+        if (Math.floor(parseInt(lessonId, 10) / 10000000) !== departmentId) {
           continue;
         }
 
