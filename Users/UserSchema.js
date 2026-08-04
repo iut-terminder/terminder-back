@@ -15,7 +15,7 @@ const UserSchema = new mongoose.Schema({
   student_no: { type: String, required: true, unique: true },
   first_name: { type: String, required: false },
   last_name: { type: String, required: false },
-  email: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
   phone: { type: String, default: null },
   password_hash: { type: String, required: true },
   is_active: { type: Boolean, default: false },

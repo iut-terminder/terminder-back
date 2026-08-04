@@ -6,6 +6,7 @@ import DepartmentAPI from './Department/Department.js';
 import InstructorAPI from './Instructor/Instructor.js';
 import LessonAPI from './Lessons/Lesson.js';
 import ScheduleAPI from './Schedules/Schedule.js';
+import CommentAPI from './Comment/Comment.js';
 
 const app = express();
 
@@ -19,5 +20,6 @@ app.use('/api/department', DepartmentAPI);
 app.use('/api/instructors', InstructorAPI);
 app.use('/api/lessons', LessonAPI);
 app.use('/api/schedules', ScheduleAPI);
+app.use('/api/comments', CommentAPI);
 
 export default app;

@@ -9,6 +9,15 @@ import { requireAuth, requireStaff, optionalAuth } from '../middleware/auth.js';
 const LessonAPI = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+const toIntSafe = (value, fallback = 0) => {
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+const toFloatSafe = (value, fallback = 0) => {
+  const parsed = parseFloat(value);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+
 // ---------- لیست/فیلتر دروس (عمومی، با پشتیبانی از department_id و include_inactive) ----------
 LessonAPI.get('/', optionalAuth, async (req, res) => {
   try {
@@ -65,10 +74,9 @@ LessonAPI.post('/upload-lessons', requireAuth, requireStaff, upload.single('exce
     const notchangedLessons = [];
     const errors = [];
 
-    // ابتدا همه‌ی دروس این دانشکده غیرفعال می‌شوند؛ هر درسی که در ادامه‌ی این فایل
-    // اکسل واقعاً پردازش شود، دوباره فعال می‌شود. دروسی که در فایل جدید نیستند
-    // (یعنی از دانشکده حذف شده‌اند) غیرفعال باقی می‌مانند.
-    await Lesson.updateMany({ department_id: department._id }, { $set: { is_active: false } });
+    // شناسه‌ی دروسی که در همین آپلود پردازش می‌شوند؛ در پایان، هر درسی از این
+    // دانشکده که اینجا دیده نشود، غیرفعال می‌شود (یعنی از فایل اکسل حذف شده است).
+    const seenLessonIds = new Set();
 
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
@@ -83,30 +91,36 @@ LessonAPI.post('/upload-lessons', requireAuth, requireStaff, upload.single('exce
         if (!lessonId) continue;
 
         const lessonName = cell(1) !== null ? String(cell(1)).trim() : '';
-        const credit = cell(2) !== null ? parseInt(cell(2), 10) : 0;
-        const activeCredit = cell(3) !== null ? parseFloat(cell(3)) : 0.0;
-        const capacity = cell(4) !== null ? parseInt(cell(4), 10) : 0;
 
-        const genderText = cell(6) !== null ? (cell(7) !== null ? String(cell(7)).trim() : '') : 'مختلط';
+        // ستون‌های اکسل: 0 شماره‌وگروه، 1 نام، 2 کل(credit)، 3 ع(active_credit),
+        // 4 ظرفیت، 5 ثبت‌نام‌شده، 6 لیست انتظار، 7 جنسیت، 8 نام استاد،
+        // 9 وضعیت استخدامی، 10 نوع مسئولیت استاد، 11 زمان‌ومکان/امتحان، 12 توضیحات
+        const credit = toIntSafe(cell(2), 0);
+        const activeCredit = toFloatSafe(cell(3), 0);
+        const capacity = toIntSafe(cell(4), 0);
+
+        const genderText = cell(7) !== null ? String(cell(7)).trim() : 'مختلط';
         const genderMap = { 'مختلط': 0, 'مرد': 1, 'زن': 2 };
         const gender = genderMap[genderText] ?? 0;
 
-        const instructorRespColumn = normalizeFaText(row.length > 8 ? cell(10) : '');
+        const instructorRespColumn = normalizeFaText(cell(10) || '');
         let instructorsList = parseInstructors(instructorRespColumn);
 
-        if (instructorsList.length === 0 && cell(6) !== null) {
-          instructorsList = [String(cell(6)).trim()];
+        if (instructorsList.length === 0 && cell(8) !== null) {
+          instructorsList = [String(cell(8)).trim()];
         }
 
-        const scheduleColumnText = normalizeFaText(row.length > 5 ? cell(11) : '');
+        const scheduleColumnText = normalizeFaText(cell(11) || '');
         const { timesList: times, examInfo: examTime } = parseScheduleAndExam(scheduleColumnText);
 
-        const description = row.length > 5 && cell(12) !== null ? normalizeFaText(cell(12)) : '';
+        const description = cell(12) !== null ? normalizeFaText(cell(12)) : '';
 
         // درس باید متعلق به همین دانشکده باشد (بر اساس کد درس)
         if (Math.floor(parseInt(lessonId, 10) / 10000000) !== departmentIdNum) {
           continue;
         }
+
+        seenLessonIds.add(lessonId);
 
         let lesson = await Lesson.findOne({ lesson_id: lessonId, department_id: department._id });
         let hasChange = false;
@@ -165,11 +179,42 @@ LessonAPI.post('/upload-lessons', requireAuth, requireStaff, upload.single('exce
           } else {
             notchangedLessons.push(lessonReport);
           }
+        } else {
+          // درس در دیتابیس وجود ندارد؛ باید تازه ایجاد شود
+          const newLesson = new Lesson({
+            lesson_id: lessonId,
+            lesson_name: lessonName,
+            department_id: department._id,
+            credit,
+            active_credit: activeCredit,
+            capacity,
+            gender,
+            instructors_list: instructorsList,
+            times,
+            exam_time: examTime,
+            description,
+            is_active: true,
+          });
+          await newLesson.save();
+
+          createdLessons.push({
+            lesson_id: newLesson.lesson_id,
+            lesson_name: newLesson.lesson_name,
+            instructors: newLesson.instructors_list,
+            credit: newLesson.credit,
+          });
         }
       } catch (rowError) {
         errors.push(`ردیف ${index + 1} (کد درس ${lessonId}): خطای پردازش داده - ${rowError.message}`);
       }
     }
+
+    // دروسی که در این آپلود دیده نشدند (یعنی از فایل اکسل جدید حذف شده‌اند) غیرفعال می‌شوند.
+    // دروسی که دیده شده‌اند دست‌نخورده می‌مانند (چه فعال بودند، چه تازه ایجاد/به‌روزرسانی/فعال شدند).
+    await Lesson.updateMany(
+      { department_id: department._id, lesson_id: { $nin: Array.from(seenLessonIds) } },
+      { $set: { is_active: false } }
+    );
 
     const summaryMessage =
       `${createdLessons.length} درس جدید اضافه شد، ` +
