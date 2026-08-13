@@ -7,6 +7,8 @@ import InstructorAPI from './Instructor/Instructor.js';
 import LessonAPI from './Lessons/Lesson.js';
 import ScheduleAPI from './Schedules/Schedule.js';
 import CommentAPI from './Comment/Comment.js';
+import FieldAPI from './Rank/Field.js';
+import RankAPI from './Rank/Rank.js';
 
 const app = express();
 
@@ -21,5 +23,7 @@ app.use('/api/instructors', InstructorAPI);
 app.use('/api/lessons', LessonAPI);
 app.use('/api/schedules', ScheduleAPI);
 app.use('/api/comments', CommentAPI);
+app.use('/api/fields', FieldAPI);
+app.use('/api/rank', RankAPI);
 
 export default app;
