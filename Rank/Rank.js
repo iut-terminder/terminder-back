@@ -1,7 +1,6 @@
 import express from 'express';
 import RankEntry from './RankEntrySchema.js';
-import Department from '../Department/DepartmentSchema.js';
-import Field from './FieldSchema.js';
+import Field from '../Field/FieldSchema.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const RankAPI = express.Router();
@@ -12,7 +11,6 @@ const VALID_ENTRY_YEARS = [400, 401, 402, 403, 404];
 RankAPI.get('/me', requireAuth, async (req, res) => {
   try {
     const entry = await RankEntry.findOne({ user: req.user.id })
-      .populate('department', 'dept_id dept_name')
       .populate('field', 'field_id field_name');
 
     return res.status(200).json({ entry: entry || null });
@@ -23,11 +21,11 @@ RankAPI.get('/me', requireAuth, async (req, res) => {
 
 // ---------- ثبت انتخاب — هر کاربر فقط یک‌بار ----------
 RankAPI.post('/', requireAuth, async (req, res) => {
-  const { hour, minute, department, field, entry_year } = req.body;
+  const { hour, minute, field, entry_year } = req.body;
 
   try {
-    if (hour === undefined || minute === undefined || !department || !field || !entry_year) {
-      return res.status(400).json({ error: 'تمام فیلدها (ساعت، دقیقه، دانشکده، رشته و ورودی) الزامی است' });
+    if (hour === undefined || minute === undefined || !field || !entry_year) {
+      return res.status(400).json({ error: 'تمام فیلدها (ساعت، دقیقه، رشته و ورودی) الزامی است' });
     }
 
     const hourNum = Number(hour);
@@ -51,13 +49,7 @@ RankAPI.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'ورودی انتخابی معتبر نیست' });
     }
 
-    const [deptExists, fieldExists] = await Promise.all([
-      Department.findById(department),
-      Field.findById(field),
-    ]);
-    if (!deptExists) {
-      return res.status(400).json({ error: 'دانشکده‌ی انتخابی یافت نشد' });
-    }
+    const fieldExists = await Field.findById(field);
     if (!fieldExists) {
       return res.status(400).json({ error: 'رشته‌ی انتخابی یافت نشد' });
     }
@@ -66,26 +58,24 @@ RankAPI.post('/', requireAuth, async (req, res) => {
     // ایندکس unique روی فیلد user در سطح دیتابیس تضمین می‌شود (جلوگیری از race condition)
     const already = await RankEntry.findOne({ user: req.user.id });
     if (already) {
-      return res.status(400).json({ error: 'شما قبلاً ساعت، دانشکده و ورودی خود را ثبت کرده‌اید' });
+      return res.status(400).json({ error: 'شما قبلاً ساعت، رشته و ورودی خود را ثبت کرده‌اید' });
     }
 
     const entry = new RankEntry({
       user: req.user.id,
       hour: hourNum,
       minute: minuteNum,
-      department,
       field,
       entry_year: entryYearNum,
     });
     await entry.save();
-    await entry.populate('department', 'dept_id dept_name');
     await entry.populate('field', 'field_id field_name');
 
     return res.status(201).json({ entry });
   } catch (err) {
     // خطای unique index مونگو (کد 11000) یعنی درخواست هم‌زمان دوم رد شده
     if (err.code === 11000) {
-      return res.status(400).json({ error: 'شما قبلاً ساعت، دانشکده و ورودی خود را ثبت کرده‌اید' });
+      return res.status(400).json({ error: 'شما قبلاً ساعت، رشته و ورودی خود را ثبت کرده‌اید' });
     }
     return res.status(400).json({ error: err.message });
   }
@@ -96,7 +86,7 @@ RankAPI.get('/result', requireAuth, async (req, res) => {
   try {
     const myEntry = await RankEntry.findOne({ user: req.user.id });
     if (!myEntry) {
-      return res.status(404).json({ error: 'شما هنوز ساعت، دانشکده و ورودی خود را ثبت نکرده‌اید' });
+      return res.status(404).json({ error: 'شما هنوز ساعت، رشته و ورودی خود را ثبت نکرده‌اید' });
     }
 
     // نفرات قبل از او: در همان رشته و همان ورودی، کسانی که ساعت زودتری انتخاب کرده‌اند
