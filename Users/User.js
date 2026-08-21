@@ -1,67 +1,104 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import validator from 'email-validator';
 import User from './UserSchema.js';
 import RefreshToken from '../tokens/tokensSchema.js';
 import { requireAuth } from '../middleware/auth.js';
 import { sendActivationEmail, sendPasswordResetEmail } from '../services/mail.js';
+import StudentEmail from './StudentEmailSchema.js'; 
 
 const UserAPI = express.Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// ---------- ثبت‌نام ----------
+// ثبت نام
 UserAPI.post('/register', async (req, res) => {
-  const { student_no, first_name, last_name, email, phone, password } = req.body;
+  const {student_no, first_name, last_name, phone, password,} = req.body;
 
   try {
-    if (!student_no || !email || !password) {
-      return res.status(400).json({ error: 'همه‌ی فیلدهای الزامی را پر کنید' });
+    if (!student_no || !password) {
+      return res.status(400).json({
+        error: 'شماره دانشجویی و رمز عبور الزامی است',
+      });
     }
 
     if (String(password).trim().length < 6) {
-      return res.status(400).json({ error: 'رمز عبور باید حداقل ۶ کاراکتر باشد' });
+      return res.status(400).json({
+        error: 'رمز عبور باید حداقل ۶ کاراکتر باشد',
+      });
     }
 
-    if (!validator.validate(String(email).trim())) {
-      return res.status(400).json({ error: 'ایمیل وارد شده معتبر نیست' });
+    const normalizedStudentNo = String(student_no).trim();
+
+    const studentEmail = await StudentEmail.findOne({
+      student_no: normalizedStudentNo,
+    });
+
+    if (!studentEmail) {
+      return res.status(400).json({
+        error: 'این شماره دانشجویی در لیست دانشجویان دانشگاه وجود ندارد',
+      });
     }
 
-    const existing = await User.findOne({ student_no: String(student_no).trim() });
+    const existing = await User.findOne({
+      student_no: normalizedStudentNo,
+    });
+
     if (existing) {
-      return res.status(400).json({ error: 'این شماره دانشجویی قبلاً ثبت‌نام کرده است' });
+      return res.status(400).json({
+        error: 'این شماره دانشجویی قبلاً ثبت‌نام کرده است',
+      });
     }
 
     const user = new User({
-      student_no: String(student_no).trim(),
+      student_no: normalizedStudentNo,
       first_name: first_name && String(first_name).trim() ? String(first_name).trim() : null,
       last_name: last_name && String(last_name).trim() ? String(last_name).trim() : null,
-      email: String(email).trim(),
+      email: studentEmail.email,
       phone: phone ? String(phone).trim() : null,
       is_active: false,
       is_staff: false,
     });
+
     await user.setPassword(password);
     await user.save();
 
     try {
       const activationToken = jwt.sign(
-        { userId: user._id.toString() },
+        {
+          userId: user._id.toString(),
+        },
         process.env.AUTH_EMAIL_TOKEN_SECRET,
-        { expiresIn: '1d' }
+        {
+          expiresIn: '1d',
+        }
       );
-      const activationLink = `${FRONTEND_URL}/#/verify-email/${user._id}/${activationToken}`;
-      await sendActivationEmail(user.email, activationLink);
+
+      const activationLink =
+        `${FRONTEND_URL}/#/verify-email/` +
+        `${user._id}/${activationToken}`;
+
+      await sendActivationEmail(
+        user.email,
+        activationLink
+      );
 
       return res.status(201).json({
-        message: 'ثبت‌نام با موفقیت انجام شد. لینک فعال‌سازی به ایمیل شما ارسال گردید',
+        message:
+          'ثبت‌نام با موفقیت انجام شد. لینک فعال‌سازی به ایمیل دانشگاهی شما ارسال گردید',
       });
     } catch (mailErr) {
-      await User.deleteOne({ _id: user._id });
-      return res.status(500).json({ error: `خطا در ارسال ایمیل فعال‌سازی: ${mailErr.message}` });
+      await User.deleteOne({
+        _id: user._id,
+      });
+
+      return res.status(500).json({
+        error: `خطا در ارسال ایمیل فعال‌سازی: ${mailErr.message}`,
+      });
     }
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    return res.status(400).json({
+      error: err.message,
+    });
   }
 });
 
